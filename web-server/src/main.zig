@@ -6,9 +6,15 @@ const Address = net.Address;
 pub const io_mode = .evented;
 
 pub fn main() !void {
-    const streamServer = StreamServer.init(.{});
+    var streamServer = StreamServer.init(.{});
     defer streamServer.deinit();
     const address = try Address.resolveIp("127.0.0.1", 8080);
 
-    streamServer.listen_address(address);
+    try streamServer.listen(address);
+
+    while (true) {
+        const connection = try streamServer.accept();
+        try connection.stream.writer().print("Hello from zig server", .{});
+        connection.stream.close();
+    }
 }
