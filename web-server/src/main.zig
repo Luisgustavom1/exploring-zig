@@ -7,6 +7,8 @@ const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 
 pub const io_mode = .evented;
 
+const StringU8 = []const u8;
+
 pub fn main() !void {
     var gpa = GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -26,6 +28,7 @@ pub fn main() !void {
 const ParsinError = error{
     MethodNotValid,
     VersionNotValid,
+    StatusNotValid,
 };
 
 const Method = enum {
@@ -35,7 +38,7 @@ const Method = enum {
     PATCH,
     DELETE,
 
-    pub fn fromString(s: []const u8) !Method {
+    pub fn fromString(s: StringU8) !Method {
         if (std.mem.eql(u8, "GET", s)) return .GET;
         if (std.mem.eql(u8, "POST", s)) return .POST;
         if (std.mem.eql(u8, "PUT", s)) return .PUT;
@@ -49,21 +52,41 @@ const Version = enum {
     @"1.1",
     @"2",
 
-    pub fn fromString(s: []const u8) !Version {
+    pub fn fromString(s: StringU8) !Version {
         if (std.mem.eql(u8, "HTTP/1.1", s)) return .@"1.1";
         if (std.mem.eql(u8, "HTTP/2", s)) return .@"2";
         return ParsinError.VersionNotValid;
     }
+
+    pub fn asString(self: Version) StringU8 {
+        if (self == Version.@"1.1") return "HTTP/1.1";
+        if (self == Version.@"2") return "HTTP/2"; 
+        unreachable;
+    }
+};
+
+const Status = enum {
+    OK,
+    
+    pub fn asString(self: Status) StringU8 {
+        if (self == Status.OK) return "OK";
+        unreachable;
+    }
+ 
+    pub fn asNumber(self: Status) usize {
+        if (self == Status.OK) return 200;
+        unreachable;
+    }  
 };
 
 const Request = struct {
     method: Method,
-    path: []const u8,
+    path: StringU8,
     version: Version,
-    headers: std.StringHashMap([]const u8),
+    headers: std.StringHashMap(StringU8),
     stream: net.Stream,
 
-    pub fn body(self: Request) net.Stream.Reader {
+    pub fn bodyReader(self: Request) net.Stream.Reader {
         return self.stream.reader();
     }
 
@@ -71,8 +94,24 @@ const Request = struct {
         return self.stream.writer();
     }
 
+    pub fn respond(self: *Request, status: Status, headers: ?std.StringHashMap(StringU8), body: StringU8) !void {
+        var writer = self.response();
+        try writer.print("{s} {} {s}\r\n", .{ self.version.asString(), status.asNumber(), status.asString() });
+
+        if (headers) |headers_non_null| {
+            var header_iter = headers_non_null.iterator();
+
+            while (header_iter.next()) |header| {
+                try writer.print("{s}: {s}\n", .{ header.key_ptr.*, header.value_ptr.* });
+            }
+        }
+        try writer.print("\r\n", .{}); // Empty line
+
+        _ = try writer.write(body);
+    }
+
     pub fn debugPrint(self: *Request) void {
-        print("method={}\npath={s}\nversion={}\n", .{ self.method, self.path, self.version });
+        print("method={}\npath={s}\nversion={s}\n", .{ self.method, self.path, self.version.asString() });
         var headersIter = self.headers.iterator();
         while (headersIter.next()) |header| {
             print("{s}: {s}", .{ header.key_ptr.*, header.value_ptr.* });
@@ -88,7 +127,7 @@ const Request = struct {
         const path = firstLineIter.next().?;
         const version = firstLineIter.next().?;
 
-        var headers = std.StringHashMap([]const u8).init(allocator);
+        var headers = std.StringHashMap(StringU8).init(allocator);
 
         while (true) {
             var headerLine = try stream.reader().readUntilDelimiterAlloc(allocator, '\n', std.math.maxInt(usize));
@@ -120,4 +159,6 @@ fn handler(allocator: std.mem.Allocator, stream: net.Stream) !void {
 
     var req = try Request.init(allocator, stream);
     req.debugPrint();
+
+    try req.respond(Status.OK, null, "Hello oooo\r\n");
 }
