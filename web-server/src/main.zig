@@ -19,11 +19,20 @@ pub fn main() !void {
 
     try streamServer.listen(address);
 
+    var frames = std.ArrayList(*Connection).init(allocator);
     while (true) {
         const connection = try streamServer.accept();
-        try handler(allocator, connection.stream);
+        var conn = try allocator.create(Connection);
+        conn.* = .{
+            .frame = async handler(allocator, connection.stream),
+        };
+        try frames.append(conn);
     }
 }
+
+const Connection = struct {
+    frame: @Frame(handler),
+};
 
 const ParsinError = error{
     MethodNotValid,
@@ -60,23 +69,23 @@ const Version = enum {
 
     pub fn asString(self: Version) StringU8 {
         if (self == Version.@"1.1") return "HTTP/1.1";
-        if (self == Version.@"2") return "HTTP/2"; 
+        if (self == Version.@"2") return "HTTP/2";
         unreachable;
     }
 };
 
 const Status = enum {
     OK,
-    
+
     pub fn asString(self: Status) StringU8 {
         if (self == Status.OK) return "OK";
         unreachable;
     }
- 
+
     pub fn asNumber(self: Status) usize {
         if (self == Status.OK) return 200;
         unreachable;
-    }  
+    }
 };
 
 const Request = struct {
@@ -158,6 +167,7 @@ fn handler(allocator: std.mem.Allocator, stream: net.Stream) !void {
     defer stream.close();
 
     var req = try Request.init(allocator, stream);
+    if (std.mem.eql(u8, req.path, "/sleep")) std.time.sleep(std.time.ns_per_s * 10);
     req.debugPrint();
 
     try req.respond(Status.OK, null, "Hello oooo\r\n");
