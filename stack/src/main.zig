@@ -33,11 +33,13 @@ fn Stack(comptime T: type) type {
 
         head: ?*ListNode,
         alloc: std.mem.Allocator,
+        len: usize,
 
         fn init(alloc: std.mem.Allocator) Self {
             return .{
                 .alloc = alloc,
                 .head = null,
+                .len = 0,
             };
         }
 
@@ -48,6 +50,8 @@ fn Stack(comptime T: type) type {
             var head = self.head;
             node.next = head;
             self.head = node;
+
+            self.len += 1;
         }
 
         fn pop(self: *Self) ?T {
@@ -55,6 +59,7 @@ fn Stack(comptime T: type) type {
                 self.head = head.next;
 
                 var value = head.value;
+                self.len -= 1;
                 self.alloc.destroy(head);
 
                 return value;
@@ -65,7 +70,7 @@ fn Stack(comptime T: type) type {
 
         fn print(self: *Self) void {
             var curr = self.head;
-            std.log.info("stack", .{});
+            std.log.info("stack: {}", .{self.len});
             while (curr) |node| {
                 std.log.info("-> {d}", .{node.value});
                 curr = node.next;
