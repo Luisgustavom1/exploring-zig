@@ -20,18 +20,20 @@ pub fn main() !void {
     std.log.info("pop {?d}\n", .{pop});
 }
 
-fn Stack(comptime T: type) type {
-    const ListNode = struct {
+fn ListNode(comptime T: type) type {
+    return struct {
         const Self = @This();
 
         value: T,
         next: ?*Self,
     };
+}
 
+fn Stack(comptime T: type) type {
     return struct {
         const Self = @This();
 
-        head: ?*ListNode,
+        head: ?*ListNode(T),
         alloc: std.mem.Allocator,
         len: usize,
 
@@ -44,7 +46,7 @@ fn Stack(comptime T: type) type {
         }
 
         fn push(self: *Self, value: T) !void {
-            var node = try self.alloc.create(ListNode);
+            var node = try self.alloc.create(ListNode(T));
             node.value = value;
 
             var head = self.head;
